@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Skin Dermatologist</title>
+<style>
+  :root{
+    --paper:#faf9f7; --surface:#fff; --rule:#e4e2dd; --rule-strong:#c9c6bf;
+    --ink:#17171b; --ink-2:#56565f; --ink-3:#84848d;
+    --benign:#1b6b4a; --benign-soft:#eaf3ee;
+    --malignant:#9b2530; --malignant-soft:#f8ecec;
+    --uncertain:#8a6212; --uncertain-soft:#f8f2e4;
+    --focus:#2b5fa8;
+    --step:.5rem;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--paper); color:var(--ink);
+    font:400 15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .num{font-variant-numeric:tabular-nums lining-nums}
+
+  header{
+    border-bottom:1px solid var(--rule); background:var(--surface);
+    padding:1.1rem 1.5rem; display:flex; flex-wrap:wrap; gap:1rem;
+    align-items:center; justify-content:space-between;
+  }
+  .brand h1{margin:0; font-size:1.0625rem; font-weight:640; letter-spacing:-.011em}
+  .brand p{margin:.15rem 0 0; font-size:.8125rem; color:var(--ink-3)}
+
+  .model-picker{display:flex; align-items:center; gap:.6rem; flex-wrap:wrap}
+  .model-picker label{font-size:.8125rem; color:var(--ink-2)}
+  select{
+    font:inherit; font-size:.875rem; color:var(--ink); background:var(--surface);
+    border:1px solid var(--rule-strong); border-radius:7px;
+    padding:.42rem 2rem .42rem .6rem; max-width:min(62vw,26rem);
+    appearance:none; cursor:pointer;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2356565f' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right .65rem center;
+  }
+  select:hover{border-color:var(--ink-3)}
+  :is(select,button,.drop):focus-visible{outline:2px solid var(--focus); outline-offset:2px}
+
+  main{
+    max-width:1180px; margin:0 auto; padding:1.75rem 1.5rem 2.5rem;
+    display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:1.5rem;
+    align-items:start;
+  }
+  @media (max-width:880px){ main{grid-template-columns:minmax(0,1fr)} }
+
+  .panel{background:var(--surface); border:1px solid var(--rule); border-radius:12px; overflow:hidden}
+  .panel-head{
+    padding:.85rem 1.15rem; border-bottom:1px solid var(--rule);
+    display:flex; align-items:baseline; justify-content:space-between; gap:1rem;
+  }
+  .panel-head h2{margin:0; font-size:.9375rem; font-weight:600; letter-spacing:-.006em}
+  .panel-head .hint{font-size:.75rem; color:var(--ink-3)}
+  .panel-body{padding:1.15rem}
+
+  /* ---------- immagine ---------- */
+  .drop{
+    width:100%; aspect-ratio:1; border:1.5px dashed var(--rule-strong); border-radius:10px;
+    background:#fcfcfb; display:grid; place-items:center; text-align:center;
+    padding:1.5rem; cursor:pointer; color:var(--ink-2);
+    transition:border-color .18s ease, background-color .18s ease;
+  }
+  .drop:hover{border-color:var(--ink-3); background:#faf9f6}
+  .drop.dragging{border-color:var(--focus); background:#f2f6fc}
+  .drop strong{display:block; font-weight:560; color:var(--ink); margin-bottom:.3rem}
+  .drop span{font-size:.8125rem; color:var(--ink-3)}
+  .preview{display:none; width:100%; aspect-ratio:1; border-radius:10px; overflow:hidden; background:#f2f1ee}
+  .preview img{width:100%; height:100%; object-fit:contain; display:block}
+  .filename{margin:.7rem 0 0; font-size:.8125rem; color:var(--ink-2); word-break:break-all}
+
+  .actions{display:flex; gap:.6rem; margin-top:1rem; flex-wrap:wrap}
+  button{
+    font:inherit; font-size:.875rem; font-weight:560; border-radius:8px; cursor:pointer;
+    padding:.6rem 1.05rem; border:1px solid transparent; transition:background-color .16s ease, border-color .16s ease;
+  }
+  .btn-primary{background:var(--ink); color:#fff}
+  .btn-primary:hover:not(:disabled){background:#33333b}
+  .btn-ghost{background:var(--surface); color:var(--ink); border-color:var(--rule-strong)}
+  .btn-ghost:hover:not(:disabled){border-color:var(--ink-3)}
+  button:disabled{opacity:.42; cursor:not-allowed}
+
+  /* ---------- esito ---------- */
+  .empty{padding:3.25rem 1.15rem; text-align:center; color:var(--ink-3); font-size:.875rem}
+  .result{display:none}
+  .verdict{padding:1.35rem 1.15rem; border-bottom:1px solid var(--rule)}
+  .verdict-word{margin:0; font-size:1.875rem; font-weight:660; letter-spacing:-.024em; line-height:1.1}
+  .verdict-note{margin:.35rem 0 0; font-size:.875rem; color:var(--ink-2)}
+  .is-benign .verdict-word{color:var(--benign)} .is-benign .verdict{background:var(--benign-soft)}
+  .is-malignant .verdict-word{color:var(--malignant)} .is-malignant .verdict{background:var(--malignant-soft)}
+  .is-uncertain .verdict-word{color:var(--uncertain)} .is-uncertain .verdict{background:var(--uncertain-soft)}
+
+  /* Lettura del modello sopra la traccia, annotazioni della scala sotto:
+     su lati opposti non si sovrappongono mai. */
+  .axis-wrap{padding:1.5rem 1.15rem 1.35rem}
+  .axis-title{margin:0 0 3.5rem; font-size:.8125rem; color:var(--ink-2)}
+  .axis{position:relative; height:14px; border-radius:3px; background:var(--benign-soft); margin-bottom:2.4rem}
+  .axis-mal{position:absolute; top:0; bottom:0; right:0; background:var(--malignant-soft); border-radius:0 3px 3px 0}
+  .axis-abstain{
+    position:absolute; top:0; bottom:0;
+    background-image:repeating-linear-gradient(45deg,rgba(138,98,18,.3) 0 2px,transparent 2px 5px);
+  }
+  .axis-line{position:absolute; inset:0; border:1px solid var(--rule-strong); border-radius:3px; pointer-events:none}
+
+  .thr{position:absolute; top:-4px; bottom:-4px; width:2px; background:var(--ink-2)}
+  .thr-label{
+    position:absolute; top:calc(100% + .5rem); white-space:nowrap;
+    font-size:.6875rem; color:var(--ink-2); font-weight:560;
+  }
+
+  .needle{
+    position:absolute; top:-12px; bottom:-4px; width:2px; margin-left:-1px;
+    background:currentColor; border-radius:1px;
+    transition:left .75s cubic-bezier(.16,1,.3,1);
+  }
+  .needle::before{
+    content:""; position:absolute; top:-4px; left:50%; transform:translateX(-50%);
+    width:9px; height:9px; border-radius:50%; background:currentColor;
+  }
+  .readout{
+    position:absolute; bottom:calc(100% + 1.15rem); white-space:nowrap;
+    transition:left .75s cubic-bezier(.16,1,.3,1);
+  }
+  .readout-val{display:block; font-size:1.0625rem; font-weight:650; letter-spacing:-.015em; line-height:1.15}
+  .readout-cap{display:block; font-size:.6875rem; color:var(--ink-3)}
+  .axis-ends{display:flex; justify-content:space-between; font-size:.6875rem; color:var(--ink-3)}
+
+  dl{margin:0; border-top:1px solid var(--rule)}
+  .row{display:flex; justify-content:space-between; gap:1rem; padding:.6rem 1.15rem; border-bottom:1px solid var(--rule)}
+  .row:last-child{border-bottom:0}
+  .row dt{color:var(--ink-2); font-size:.8125rem}
+  .row dd{margin:0; font-size:.8125rem; font-weight:560; text-align:right}
+
+  .note{margin:0; padding:.85rem 1.15rem; font-size:.8125rem; color:var(--uncertain); background:var(--uncertain-soft); border-top:1px solid var(--rule)}
+  .error{display:none; margin:0; padding:.85rem 1.15rem; font-size:.875rem; color:var(--malignant); background:var(--malignant-soft); border-top:1px solid var(--rule)}
+
+  .spinner{display:inline-block; width:13px; height:13px; margin-right:.45rem; vertical-align:-2px;
+    border:2px solid rgba(255,255,255,.35); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){ *{transition-duration:.01ms !important; animation-duration:.01ms !important} }
+
+  footer{max-width:1180px; margin:0 auto; padding:0 1.5rem 2.5rem; color:var(--ink-3); font-size:.8125rem}
+  footer p{margin:0; max-width:68ch}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>AI Skin Dermatologist</h1>
+    <p>Classificazione di lesioni cutanee &mdash; benigne o maligne</p>
+  </div>
+  <div class="model-picker">
+    <label for="model">Modello</label>
+    <select id="model"><option>caricamento…</option></select>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Immagine</h2>
+      <span class="hint">JPG, PNG o BMP</span>
+    </div>
+    <div class="panel-body">
+      <div class="drop" id="drop" tabindex="0" role="button"
+           aria-label="Seleziona o trascina un'immagine">
+        <div>
+          <strong>Trascina qui un'immagine</strong>
+          <span>oppure clicca per sceglierla dal disco</span>
+        </div>
+      </div>
+      <div class="preview" id="preview">
+        <img id="previewImg" alt="Lesione da analizzare"
+             src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+      </div>
+      <input type="file" id="file" accept="image/*" hidden>
+      <p class="filename" id="filename"></p>
+      <div class="actions">
+        <button class="btn-primary" id="run" disabled>Classifica</button>
+        <button class="btn-ghost" id="reset" disabled>Azzera</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="out">
+    <div class="panel-head">
+      <h2>Esito</h2>
+      <span class="hint" id="deviceHint"></span>
+    </div>
+
+    <p class="empty" id="empty">Nessuna analisi effettuata.</p>
+    <p class="error" id="error" role="alert"></p>
+
+    <div class="result" id="result" aria-live="polite">
+      <div class="verdict">
+        <p class="verdict-word" id="word"></p>
+        <p class="verdict-note" id="note"></p>
+      </div>
+
+      <div class="axis-wrap">
+        <p class="axis-title">Probabilità di malignità rispetto alla soglia di decisione</p>
+        <div class="axis">
+          <div class="axis-mal" id="axisMal"></div>
+          <div class="axis-abstain" id="axisAbstain"></div>
+          <div class="axis-line"></div>
+          <div class="thr" id="thr"></div>
+          <span class="thr-label" id="thrLabel"></span>
+          <div class="needle" id="needle"></div>
+          <div class="readout" id="readout">
+            <span class="readout-val num" id="markerVal"></span>
+            <span class="readout-cap">p(maligno)</span>
+          </div>
+        </div>
+        <div class="axis-ends"><span>0%</span><span>100%</span></div>
+      </div>
+
+      <dl>
+        <div class="row"><dt>Confidenza</dt><dd class="num" id="conf"></dd></div>
+        <div class="row"><dt>Soglia di decisione</dt><dd class="num" id="thrVal"></dd></div>
+        <div class="row"><dt>Soglia di astensione</dt><dd class="num" id="absVal"></dd></div>
+        <div class="row"><dt>Modello</dt><dd id="modelVal"></dd></div>
+      </dl>
+      <p class="note" id="abstainNote" hidden></p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p>Strumento di supporto a scopo didattico. Non sostituisce in alcun modo una
+     valutazione dermatologica professionale. Un esito benigno non esclude la
+     necessità di un controllo specialistico.</p>
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+let file = null;
+
+// Modelli
+fetch("/api/models").then(r => r.json()).then(d => {
+  const sel = $("model");
+  sel.innerHTML = "";
+  if (!d.models || !d.models.length) {
+    sel.innerHTML = "<option>nessun modello</option>";
+    showError(d.error || "Nessun checkpoint disponibile in Model/.");
+    return;
+  }
+  for (const m of d.models) {
+    const o = document.createElement("option");
+    o.value = m.file;
+    const acc = m.val_balanced_accuracy ? ` · bal-acc val ${(m.val_balanced_accuracy*100).toFixed(1)}%` : "";
+    o.textContent = `${m.arch} · ${m.img_size}px · soglia ${m.threshold}${acc}`;
+    sel.appendChild(o);
+  }
+  // Preseleziono il modello con la balanced accuracy di validation più alta.
+  const best = d.models.reduce((a,b) => (b.val_balanced_accuracy||0) > (a.val_balanced_accuracy||0) ? b : a);
+  sel.value = best.file;
+}).catch(() => showError("Impossibile contattare il server."));
+
+// Selezione dell'immagine
+const drop = $("drop");
+drop.addEventListener("click", () => $("file").click());
+drop.addEventListener("keydown", e => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); }
+});
+["dragenter","dragover"].forEach(ev =>
+  drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("dragging"); }));
+["dragleave","drop"].forEach(ev =>
+  drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("dragging"); }));
+drop.addEventListener("drop", e => { if (e.dataTransfer.files[0]) accept(e.dataTransfer.files[0]); });
+$("file").addEventListener("change", e => { if (e.target.files[0]) accept(e.target.files[0]); });
+
+function accept(f) {
+  if (!f.type.startsWith("image/")) { showError("Il file selezionato non è un'immagine."); return; }
+  file = f;
+  const reader = new FileReader();               // anteprima locale: non passa dal server
+  reader.onload = ev => {
+    $("previewImg").src = ev.target.result;
+    $("preview").style.display = "block";
+    drop.style.display = "none";
+  };
+  reader.readAsDataURL(f);
+  $("filename").textContent = f.name;
+  $("run").disabled = false;
+  $("reset").disabled = false;
+  clearResult();
+}
+
+$("reset").addEventListener("click", () => {
+  file = null;
+  $("file").value = "";
+  $("preview").style.display = "none";
+  drop.style.display = "grid";
+  $("filename").textContent = "";
+  $("run").disabled = true;
+  $("reset").disabled = true;
+  clearResult();
+});
+
+function clearResult() {
+  $("result").style.display = "none";
+  $("error").style.display = "none";
+  $("empty").style.display = "block";
+  $("out").className = "panel";
+}
+function showError(msg) {
+  $("error").textContent = msg;
+  $("error").style.display = "block";
+  $("empty").style.display = "none";
+  $("result").style.display = "none";
+}
+
+// Classificazione
+$("run").addEventListener("click", async () => {
+  if (!file) return;
+  const btn = $("run");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Analisi in corso…';
+  $("error").style.display = "none";
+
+  try {
+    const fd = new FormData();
+    fd.append("image", file);
+    fd.append("model", $("model").value);
+    const res = await fetch("/api/predict", { method:"POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) { showError(data.error || "Errore durante la classificazione."); return; }
+    render(data);
+  } catch (err) {
+    showError("Il server non ha risposto. È ancora in esecuzione?");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Classifica";
+  }
+});
+
+function render(d) {
+  const pct = v => (v * 100).toFixed(1) + "%";
+  const T = d.threshold, A = d.abstention_threshold, p = d.prob_malignant;
+
+  $("empty").style.display = "none";
+  $("error").style.display = "none";
+  $("result").style.display = "block";
+
+  const state = d.abstained ? "uncertain" : (d.label === "malignant" ? "malignant" : "benign");
+  $("out").className = "panel is-" + state;
+  $("word").textContent = d.abstained ? "INCERTO" : (state === "malignant" ? "MALIGNO" : "BENIGNO");
+  $("note").textContent = d.abstained
+    ? "La confidenza è sotto la soglia di astensione: il modello non si esprime."
+    : (state === "malignant"
+        ? "Segnali compatibili con una lesione maligna. Si raccomanda una valutazione dermatologica."
+        : "Nessun segnale di malignità rilevato dal modello.");
+
+  // Zona maligna e banda di astensione, ricavate dalle soglie effettive.
+  $("axisMal").style.left = (T * 100) + "%";
+  const lo = Math.min(1 - A, T), hi = Math.max(T, A);
+  const band = $("axisAbstain");
+  band.style.left = (lo * 100) + "%";
+  band.style.width = Math.max(0, (hi - lo) * 100) + "%";
+
+  // Vicino ai bordi allineo l'etichetta verso l'interno, altrimenti resta tagliata.
+  const anchor = (el, frac) => {
+    el.style.left = (frac * 100) + "%";
+    if (frac < 0.12)      { el.style.transform = "none"; }
+    else if (frac > 0.88) { el.style.transform = "translateX(-100%)"; }
+    else                  { el.style.transform = "translateX(-50%)"; }
+  };
+
+  $("thr").style.left = "calc(" + (T * 100) + "% - 1px)";
+  $("thrLabel").textContent = "soglia " + pct(T);
+  anchor($("thrLabel"), T);
+
+  const color = state === "malignant" ? "var(--malignant)"
+              : state === "uncertain" ? "var(--uncertain)" : "var(--benign)";
+  const needle = $("needle"), readout = $("readout");
+  needle.style.color = color;
+  readout.style.color = color;
+  $("markerVal").textContent = pct(p);
+  requestAnimationFrame(() => {
+    needle.style.left = (p * 100) + "%";
+    anchor(readout, p);
+  });
+
+  $("conf").textContent = pct(d.confidence);
+  $("thrVal").textContent = pct(T);
+  $("absVal").textContent = pct(A);
+  $("modelVal").textContent = `${d.model.arch} · ${d.model.img_size}px`;
+  $("deviceHint").textContent = d.model.device.toUpperCase();
+
+  const note = $("abstainNote");
+  note.hidden = !d.abstained;
+  if (d.abstained) {
+    note.textContent = `La probabilità cade nella banda ${pct(lo)}–${pct(hi)}, dove il modello `
+      + `non è abbastanza sicuro. Il caso va valutato da una persona.`;
+  }
+}
+</script>
+</body>
+</html>

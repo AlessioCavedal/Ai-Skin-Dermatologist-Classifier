@@ -1,0 +1,38 @@
+# Dataset: 170 MB e 3.297 immagini di terze parti, non ridistribuibili qui.
+# Vedi il README per il link di download.
+Skin cancer/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.Python
+*.egg-info/
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Pesi scaricati automaticamente da torchvision
+*.pth.tar
+
+# Checkpoint addestrati: distribuiti come allegati delle Release, non nel repository.
+# Vedi il README per il link di download.
+Model/*.pth
+
+# Risultati rigenerabili: chi clona li riproduce con audit_dataset.py, dedup.py
+# ed evaluate.py. Le curve di addestramento restano in Results/figures.
+Results/dataset/
+Results/reports/
+Results/logs/
+
+# Sorgente del report: nel repository resta solo il PDF finale.
+Report/
