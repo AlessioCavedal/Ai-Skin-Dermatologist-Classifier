@@ -1,7 +1,7 @@
 # AI Skin Dermatologist
 
 Classificatore di lesioni cutanee **benigne** o **maligne** a partire da immagini
-dermatoscopiche, realizzato come progetto universitario di Computer Vision.
+dermatoscopiche, realizzato come progetto universitario del corso AI Lab.
 
 ![Interfaccia](docs/interfaccia.png)
 
